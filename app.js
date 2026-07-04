@@ -104,6 +104,7 @@ let lastVideoScan = 0;
 let lastTrackTime = 0;
 let trackingPatch = null;
 let trackerConfidence = 0;
+let surfaceLock = { side: "center", type: "ceiling" };
 let xrSession = null;
 let xrRefSpace = null;
 let xrViewerSpace = null;
@@ -117,7 +118,7 @@ let xrPlaced = false;
 
 const fallbackAnchors = {
   ceiling: { x: 50, y: 17 },
-  wall: { x: 50, y: 38 },
+  wall: { x: 68, y: 38 },
   strip: { x: 50, y: 14 }
 };
 
@@ -181,6 +182,10 @@ function clampToMount(point, mount = selectedProduct.mount) {
 function lockToPoint(point, immediate = false) {
   anchor = clampToMount(point);
   target = { ...anchor };
+  surfaceLock = {
+    type: selectedProduct.mount,
+    side: anchor.x < 38 ? "left" : anchor.x > 62 ? "right" : "center"
+  };
   locked = true;
   scanning = false;
   cameraStatus.textContent =
@@ -284,16 +289,86 @@ function trackLockedPoint() {
   }
 
   trackerConfidence = Math.max(0, Math.min(1, 1 - best.score / 42));
-  if (trackerConfidence < 0.18) return;
+  if (trackerConfidence < 0.18) {
+    target = clampToSurfaceLock(target);
+    return;
+  }
 
   trackingPatch.x = best.x;
   trackingPatch.y = best.y;
-  const trackedPoint = clampToMount({
+  const trackedPoint = clampToSurfaceLock(clampToMount({
     x: (best.x / trackingCanvas.width) * 100,
     y: (best.y / trackingCanvas.height) * 100
-  });
+  }));
   anchor = trackedPoint;
   target = trackedPoint;
+}
+
+function clampToSurfaceLock(point) {
+  if (!surfaceLock || surfaceLock.type !== selectedProduct.mount) return point;
+
+  if (surfaceLock.type === "ceiling") {
+    return {
+      x: Math.max(16, Math.min(84, point.x)),
+      y: Math.max(5, Math.min(20, point.y))
+    };
+  }
+
+  if (surfaceLock.type === "strip") {
+    return {
+      x: Math.max(8, Math.min(92, point.x)),
+      y: Math.max(6, Math.min(17, point.y))
+    };
+  }
+
+  const sideBounds = {
+    left: [8, 42],
+    center: [30, 70],
+    right: [58, 92]
+  };
+  const [minX, maxX] = sideBounds[surfaceLock.side] || sideBounds.center;
+  return {
+    x: Math.max(minX, Math.min(maxX, point.x)),
+    y: Math.max(18, Math.min(76, point.y))
+  };
+}
+
+function estimateWallAnchorFromPixels(pixels, width, height) {
+  const candidates = [];
+  const startY = Math.round(height * 0.24);
+  const endY = Math.round(height * 0.76);
+  const startX = Math.round(width * 0.08);
+  const endX = Math.round(width * 0.92);
+
+  for (let y = startY; y < endY; y += 3) {
+    for (let x = startX; x < endX; x += 3) {
+      const center = luminanceAt(pixels, width, x, y);
+      const left = luminanceAt(pixels, width, Math.max(1, x - 3), y);
+      const right = luminanceAt(pixels, width, Math.min(width - 2, x + 3), y);
+      const top = luminanceAt(pixels, width, x, Math.max(1, y - 3));
+      const bottom = luminanceAt(pixels, width, x, Math.min(height - 2, y + 3));
+      const contrast = Math.abs(left - right) + Math.abs(top - bottom);
+      const brightness = center > 185 ? 10 : 0;
+      const centerPenalty = 1 - Math.min(0.65, Math.abs(x / width - 0.5));
+      const score = (contrast + brightness) * (1.25 - centerPenalty * 0.35);
+
+      if (score > 34) {
+        candidates.push({ x, y, score });
+      }
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const best = candidates[0];
+
+  if (!best) {
+    return { x: 68, y: 38 };
+  }
+
+  return {
+    x: (best.x / width) * 100,
+    y: (best.y / height) * 100
+  };
 }
 
 function estimateAnchorFromVideo() {
@@ -330,7 +405,7 @@ function estimateAnchorFromVideo() {
   }
 
   if (selectedProduct.mount === "wall") {
-    return { x: 50, y: Math.max(31, Math.min(52, boundaryPercent + 10)) };
+    return clampToMount(estimateWallAnchorFromPixels(pixels, width, height), "wall");
   }
 
   return { x: 50, y: Math.max(10, Math.min(17, boundaryPercent * 0.38)) };
