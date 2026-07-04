@@ -368,6 +368,62 @@ input[type="range"] {
   box-shadow: var(--shadow);
 }
 
+.camera-icon {
+  position: absolute;
+  z-index: 30;
+  display: none;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(13, 18, 20, 0.72);
+  color: #fff;
+  font-size: 1.7rem;
+  line-height: 1;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.camera-close {
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+}
+
+.camera-rescan {
+  top: max(14px, env(safe-area-inset-top));
+  right: max(14px, env(safe-area-inset-right));
+  font-size: 1.45rem;
+}
+
+body.ar-mode {
+  overflow: hidden;
+}
+
+body.ar-mode .phone-frame {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  width: 100vw;
+  height: 100dvh;
+  min-height: 100dvh;
+  border: 0;
+  border-radius: 0;
+  background: #050607;
+  box-shadow: none;
+}
+
+body.ar-mode .camera-icon {
+  display: grid;
+}
+
+body.ar-mode .preview-panel,
+body.ar-mode .topbar,
+body.ar-mode .hero,
+body.ar-mode .section-head,
+body.ar-mode .catalog-grid {
+  visibility: hidden;
+}
+
 #camera,
 #arCanvas,
 .room-fallback,

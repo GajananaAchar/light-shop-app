@@ -80,6 +80,8 @@ const mountLine = document.querySelector("#mountLine");
 const arCanvas = document.querySelector("#arCanvas");
 const cameraButton = document.querySelector("#cameraButton");
 const resetButton = document.querySelector("#resetButton");
+const closeCameraButton = document.querySelector("#closeCameraButton");
+const rescanCameraButton = document.querySelector("#rescanCameraButton");
 const camera = document.querySelector("#camera");
 const fallbackRoom = document.querySelector("#fallbackRoom");
 const cameraStatus = document.querySelector("#cameraStatus");
@@ -98,6 +100,9 @@ let scanning = false;
 let dragOffset = { x: 0, y: 0 };
 let anchor = { x: 50, y: 18 };
 let renderState = { x: 50, y: 18, vx: 0, vy: 0 };
+let renderScale = 1;
+let targetScale = 1;
+let scaleVelocity = 0;
 let target = { x: 50, y: 18 };
 let lastTime = performance.now();
 let lastVideoScan = 0;
@@ -182,6 +187,9 @@ function clampToMount(point, mount = selectedProduct.mount) {
 function lockToPoint(point, immediate = false) {
   anchor = clampToMount(point);
   target = { ...anchor };
+  targetScale = 1;
+  renderScale = immediate ? 1 : renderScale;
+  scaleVelocity = 0;
   surfaceLock = {
     type: selectedProduct.mount,
     side: anchor.x < 38 ? "left" : anchor.x > 62 ? "right" : "center"
@@ -197,6 +205,7 @@ function lockToPoint(point, immediate = false) {
 
   if (immediate) {
     renderState = { x: anchor.x, y: anchor.y, vx: 0, vy: 0 };
+    renderScale = 1;
   }
 
   captureTrackingPatch();
@@ -253,7 +262,8 @@ function captureTrackingPatch() {
     size: patchSize,
     half,
     x: center.x,
-    y: center.y
+    y: center.y,
+    scale: 1
   };
 }
 
@@ -261,41 +271,56 @@ function trackLockedPoint() {
   if (!trackingPatch || dragging || scanning || !locked || !drawTrackingFrame()) return;
 
   const source = trackingContext.getImageData(0, 0, trackingCanvas.width, trackingCanvas.height).data;
-  const searchRadius = 13;
+  const searchRadius = selectedProduct.mount === "ceiling" ? 18 : 20;
   const { half, size, values } = trackingPatch;
-  let best = { score: Number.POSITIVE_INFINITY, x: trackingPatch.x, y: trackingPatch.y };
+  const scaleGuesses = [0.72, 0.82, 0.92, 1, 1.1, 1.22, 1.36];
+  let best = { score: Number.POSITIVE_INFINITY, x: trackingPatch.x, y: trackingPatch.y, scale: trackingPatch.scale || 1 };
 
   for (let y = trackingPatch.y - searchRadius; y <= trackingPatch.y + searchRadius; y += 2) {
-    if (y < half || y >= trackingCanvas.height - half) continue;
     for (let x = trackingPatch.x - searchRadius; x <= trackingPatch.x + searchRadius; x += 2) {
-      if (x < half || x >= trackingCanvas.width - half) continue;
-      let score = 0;
-      let i = 0;
-
-      for (let py = -half; py <= half; py += 2) {
-        for (let px = -half; px <= half; px += 2) {
-          const current = luminanceAt(source, trackingCanvas.width, x + px, y + py);
-          const previous = values[(py + half) * size + (px + half)];
-          score += Math.abs(current - previous);
-          i += 1;
+      for (const scale of scaleGuesses) {
+        if (
+          x - half * scale < 1 ||
+          y - half * scale < 1 ||
+          x + half * scale >= trackingCanvas.width - 1 ||
+          y + half * scale >= trackingCanvas.height - 1
+        ) {
+          continue;
         }
-      }
 
-      score /= i;
-      if (score < best.score) {
-        best = { score, x, y };
+        let score = 0;
+        let i = 0;
+
+        for (let py = -half; py <= half; py += 2) {
+          for (let px = -half; px <= half; px += 2) {
+            const scaledX = Math.round(x + px * scale);
+            const scaledY = Math.round(y + py * scale);
+            const current = luminanceAt(source, trackingCanvas.width, scaledX, scaledY);
+            const previous = values[(py + half) * size + (px + half)];
+            score += Math.abs(current - previous);
+            i += 1;
+          }
+        }
+
+        score = score / i + Math.abs(scale - (trackingPatch.scale || 1)) * 5;
+        if (score < best.score) {
+          best = { score, x, y, scale };
+        }
       }
     }
   }
 
   trackerConfidence = Math.max(0, Math.min(1, 1 - best.score / 42));
-  if (trackerConfidence < 0.18) {
+  if (trackerConfidence < 0.16) {
     target = clampToSurfaceLock(target);
+    targetScale = Math.max(0.68, Math.min(1.55, targetScale));
     return;
   }
 
   trackingPatch.x = best.x;
   trackingPatch.y = best.y;
+  trackingPatch.scale = best.scale;
+  targetScale = Math.max(0.68, Math.min(1.55, targetScale * 0.72 + best.scale * 0.28));
   const trackedPoint = clampToSurfaceLock(clampToMount({
     x: (best.x / trackingCanvas.width) * 100,
     y: (best.y / trackingCanvas.height) * 100
@@ -414,11 +439,38 @@ function estimateAnchorFromVideo() {
 function startAutoScan() {
   scanning = true;
   locked = false;
+  targetScale = 1;
   cameraStatus.textContent = "Scanning. Keep the phone steady for a moment.";
 
   window.setTimeout(() => {
     lockToPoint(estimateAnchorFromVideo(), false);
   }, activeStream ? 1200 : 700);
+}
+
+function enterCameraMode() {
+  document.body.classList.add("camera-live", "ar-mode");
+  window.scrollTo({ top: document.querySelector("#preview").offsetTop, behavior: "auto" });
+}
+
+function stopCamera() {
+  if (xrSession) {
+    xrSession.end();
+  }
+  if (activeStream) {
+    activeStream.getTracks().forEach((track) => track.stop());
+  }
+  activeStream = null;
+  trackingPatch = null;
+  trackerConfidence = 0;
+  targetScale = 1;
+  renderScale = 1;
+  camera.srcObject = null;
+  camera.style.display = "none";
+  fallbackRoom.style.display = "block";
+  document.body.classList.remove("camera-live", "ar-mode");
+  cameraButton.textContent = "Open camera & scan";
+  resetButton.textContent = "Re-scan";
+  cameraStatus.textContent = "Choose a light, open the camera, and the app will lock it to the right wall or ceiling area.";
 }
 
 async function startCamera() {
@@ -427,6 +479,7 @@ async function startCamera() {
   }
 
   if (activeStream) {
+    enterCameraMode();
     startAutoScan();
     return;
   }
@@ -439,12 +492,12 @@ async function startCamera() {
     camera.srcObject = activeStream;
     camera.style.display = "block";
     fallbackRoom.style.display = "none";
-    document.body.classList.add("camera-live");
+    enterCameraMode();
     cameraButton.textContent = "Scan again";
     resetButton.textContent = "Change lock";
     startAutoScan();
   } catch (error) {
-    document.body.classList.remove("camera-live");
+    document.body.classList.remove("camera-live", "ar-mode");
     cameraStatus.textContent = "Camera could not start. The sample room will still auto-lock the light.";
     startAutoScan();
   }
@@ -576,7 +629,7 @@ async function startTrueAR() {
     xrHitTestSource = await xrSession.requestHitTestSource({ space: xrViewerSpace });
     xrPlaced = false;
     xrAnchorMatrix = null;
-    document.body.classList.add("xr-live");
+    document.body.classList.add("xr-live", "ar-mode");
     cameraButton.textContent = "AR active";
     resetButton.textContent = "Place again";
     cameraStatus.textContent = "Move the phone slowly. Tap the camera area once to set the light in real AR.";
@@ -590,7 +643,7 @@ async function startTrueAR() {
 }
 
 function stopTrueAR() {
-  document.body.classList.remove("xr-live");
+  document.body.classList.remove("xr-live", "ar-mode");
   xrSession = null;
   xrRefSpace = null;
   xrViewerSpace = null;
@@ -642,7 +695,7 @@ function onXrFrame(time, frame) {
 }
 
 function updateVisuals(x = renderState.x, y = renderState.y) {
-  const width = selectedProduct.width;
+  const width = selectedProduct.width * renderScale;
   const mount = selectedProduct.mount;
   const glowWidth = mount === "strip" ? width * 1.35 : width * 1.22;
   const glowHeight = mount === "strip" ? 58 : width * 0.74;
@@ -692,6 +745,9 @@ function animate(now = performance.now()) {
     renderState.vy *= 0.72;
     renderState.x += renderState.vx * delta;
     renderState.y += renderState.vy * delta;
+    scaleVelocity += (targetScale - renderScale) * 0.1 * delta;
+    scaleVelocity *= 0.76;
+    renderScale += scaleVelocity * delta;
   }
 
   updateVisuals();
@@ -731,6 +787,9 @@ resetButton.addEventListener("click", () => {
   }
   startAutoScan();
 });
+
+closeCameraButton.addEventListener("click", stopCamera);
+rescanCameraButton.addEventListener("click", startAutoScan);
 
 arCanvas.addEventListener("click", () => {
   if (!xrSession || !xrAnchorMatrix) return;
