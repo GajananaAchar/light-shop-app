@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GlowNest Lights</title>
+    <link rel="stylesheet" href="styles.css?v=4" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">Light catalog and room preview</p>
+        <h1>GlowNest Lights</h1>
+      </div>
+      <nav aria-label="Main navigation">
+        <a href="#catalog">Catalog</a>
+        <a href="#preview">Camera Preview</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero" aria-label="Lighting showroom">
+        <img src="assets/showroom.png" alt="Modern lighting showroom with warm ceiling lights and hanging lamps" />
+        <div class="hero-copy">
+          <p class="eyebrow">For your friend's electrical lights shop</p>
+          <h2>Choose a light. Place it in the room. Feel it before buying.</h2>
+          <p>
+            A client-friendly catalog that lets shoppers browse fixtures and try them over a live camera view of their home.
+          </p>
+          <a class="primary-action" href="#preview">Open camera preview</a>
+        </div>
+      </section>
+
+      <section class="section-head" id="catalog">
+        <div>
+          <p class="eyebrow">Catalog</p>
+          <h2>Featured lights</h2>
+        </div>
+        <div class="filter-group" aria-label="Filter catalog">
+          <button class="filter active" data-filter="all">All</button>
+          <button class="filter" data-filter="ceiling">Ceiling</button>
+          <button class="filter" data-filter="wall">Wall</button>
+          <button class="filter" data-filter="decor">Decor</button>
+        </div>
+      </section>
+
+      <section class="catalog-grid" aria-label="Light catalog" id="catalogGrid"></section>
+
+      <section class="preview-shell" id="preview">
+        <aside class="preview-panel" aria-label="Selected light details">
+          <p class="eyebrow">Auto AR Preview</p>
+          <h2 id="selectedName">Aurora Ring Chandelier</h2>
+          <p id="selectedDescription">
+            A warm circular chandelier for living rooms, lounges, and premium dining spaces.
+          </p>
+
+          <div class="selected-mini">
+            <img class="selected-photo" id="selectedIcon" alt="" />
+            <div>
+              <span id="selectedType">Ceiling light</span>
+              <strong id="selectedPrice">Rs 8,500</strong>
+            </div>
+          </div>
+
+          <div class="button-row">
+            <button id="cameraButton" class="primary-button" type="button">Open camera & scan</button>
+            <button id="resetButton" class="ghost-button" type="button">Re-scan</button>
+          </div>
+          <p class="hint" id="cameraStatus">Choose a light, open the camera, and the app will lock it to the right wall or ceiling area.</p>
+        </aside>
+
+        <div class="phone-frame" aria-label="Camera preview area">
+          <canvas id="arCanvas"></canvas>
+          <video id="camera" autoplay playsinline muted></video>
+          <div class="room-fallback" id="fallbackRoom">
+            <div class="fallback-wall"></div>
+            <div class="fallback-sofa"></div>
+            <div class="fallback-table"></div>
+          </div>
+          <div class="placement-area" id="placementArea">
+            <div class="mount-line" id="mountLine"></div>
+            <div class="light-glow" id="lightGlow"></div>
+            <div class="contact-shadow" id="contactShadow"></div>
+            <div class="placed-light" id="placedLight" role="img" aria-label="Selected light placement preview"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js?v=4"></script>
+  </body>
+</html>
