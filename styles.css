@@ -336,20 +336,10 @@ input[type="range"] {
 }
 
 .primary-button,
-.ghost-button,
-.ar-button {
+.ghost-button {
   min-height: 44px;
   padding: 10px 12px;
   font-weight: 800;
-}
-
-.ar-button {
-  grid-column: 1 / -1;
-  border: 0;
-  border-radius: 6px;
-  background: #1d2329;
-  color: white;
-  cursor: pointer;
 }
 
 .primary-button {

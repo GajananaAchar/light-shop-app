@@ -90,7 +90,6 @@ const lightGlow = document.querySelector("#lightGlow");
 const contactShadow = document.querySelector("#contactShadow");
 const mountLine = document.querySelector("#mountLine");
 const arCanvas = document.querySelector("#arCanvas");
-const nativeArButton = document.querySelector("#nativeArButton");
 const cameraButton = document.querySelector("#cameraButton");
 const resetButton = document.querySelector("#resetButton");
 const closeCameraButton = document.querySelector("#closeCameraButton");
@@ -142,45 +141,6 @@ const fallbackAnchors = {
 
 function productPhoto(product, className = "product-photo") {
   return `<img class="${className}" src="${product.image}" alt="${product.name}" loading="lazy" />`;
-}
-
-function absoluteAssetUrl(path) {
-  return new URL(path, window.location.href).href;
-}
-
-function isIosDevice() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-}
-
-function isAndroidDevice() {
-  return /Android/i.test(navigator.userAgent);
-}
-
-function openNativeAR() {
-  const glbUrl = absoluteAssetUrl(selectedProduct.glb);
-  const usdzUrl = absoluteAssetUrl(selectedProduct.usdz);
-
-  if (isIosDevice()) {
-    const link = document.createElement("a");
-    link.setAttribute("rel", "ar");
-    link.setAttribute("href", usdzUrl);
-    link.style.display = "none";
-    const image = document.createElement("img");
-    image.setAttribute("alt", selectedProduct.name);
-    link.appendChild(image);
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    return;
-  }
-
-  if (isAndroidDevice()) {
-    const sceneViewer = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(glbUrl)}&mode=ar_preferred&title=${encodeURIComponent(selectedProduct.name)}#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(glbUrl)};end;`;
-    window.location.href = sceneViewer;
-    return;
-  }
-
-  cameraStatus.textContent = "Open this page on iPhone or Android to launch the phone's real AR viewer.";
 }
 
 function renderCatalog(filter = "all") {
@@ -830,7 +790,6 @@ filters.forEach((button) => {
 });
 
 cameraButton.addEventListener("click", startCamera);
-nativeArButton.addEventListener("click", openNativeAR);
 resetButton.addEventListener("click", () => {
   if (xrSession) {
     xrPlaced = false;
