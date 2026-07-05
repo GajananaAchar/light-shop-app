@@ -236,6 +236,68 @@ function luminanceAt(data, width, x, y) {
   return data[index] * 0.299 + data[index + 1] * 0.587 + data[index + 2] * 0.114;
 }
 
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const middle = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+function trackingBounds() {
+  if (selectedProduct.mount === "ceiling") {
+    return { minX: 12, maxX: 108, minY: 4, maxY: 28 };
+  }
+
+  if (selectedProduct.mount === "strip") {
+    return { minX: 8, maxX: 112, minY: 4, maxY: 24 };
+  }
+
+  const sideBounds = {
+    left: [8, 52],
+    center: [28, 92],
+    right: [68, 112]
+  };
+  const [minX, maxX] = sideBounds[surfaceLock.side] || sideBounds.center;
+  return { minX, maxX, minY: 18, maxY: 74 };
+}
+
+function localContrast(data, width, height, x, y) {
+  if (x < 3 || y < 3 || x >= width - 3 || y >= height - 3) return 0;
+  const center = luminanceAt(data, width, x, y);
+  const left = luminanceAt(data, width, x - 3, y);
+  const right = luminanceAt(data, width, x + 3, y);
+  const top = luminanceAt(data, width, x, y - 3);
+  const bottom = luminanceAt(data, width, x, y + 3);
+  return Math.abs(left - right) + Math.abs(top - bottom) + Math.abs(center - left) * 0.35;
+}
+
+function readPatch(data, width, x, y, half) {
+  const values = [];
+  for (let py = -half; py <= half; py += 1) {
+    for (let px = -half; px <= half; px += 1) {
+      values.push(luminanceAt(data, width, x + px, y + py));
+    }
+  }
+  return values;
+}
+
+function patchDifference(data, width, x, y, patch) {
+  const { half, size, values } = patch;
+  let score = 0;
+  let count = 0;
+
+  for (let py = -half; py <= half; py += 2) {
+    for (let px = -half; px <= half; px += 2) {
+      const current = luminanceAt(data, width, x + px, y + py);
+      const previous = values[(py + half) * size + (px + half)];
+      score += Math.abs(current - previous);
+      count += 1;
+    }
+  }
+
+  return score / Math.max(1, count);
+}
+
 function percentToTrackPixel(point) {
   return {
     x: Math.round((point.x / 100) * trackingCanvas.width),
@@ -248,33 +310,49 @@ function captureTrackingPatch() {
   trackerConfidence = 0;
   if (!drawTrackingFrame()) return;
 
-  const patchSize = 17;
+  const patchSize = 9;
   const half = Math.floor(patchSize / 2);
-  const center = percentToTrackPixel(anchor);
+  const anchorPixel = percentToTrackPixel(anchor);
   const source = trackingContext.getImageData(0, 0, trackingCanvas.width, trackingCanvas.height).data;
-  const values = [];
+  const bounds = trackingBounds();
+  const candidates = [];
 
-  if (
-    center.x < half ||
-    center.y < half ||
-    center.x >= trackingCanvas.width - half ||
-    center.y >= trackingCanvas.height - half
-  ) {
+  if (anchorPixel.x < half || anchorPixel.y < half || anchorPixel.x >= trackingCanvas.width - half || anchorPixel.y >= trackingCanvas.height - half) {
     return;
   }
 
-  for (let y = -half; y <= half; y += 1) {
-    for (let x = -half; x <= half; x += 1) {
-      values.push(luminanceAt(source, trackingCanvas.width, center.x + x, center.y + y));
+  for (let y = bounds.minY; y <= bounds.maxY; y += 5) {
+    for (let x = bounds.minX; x <= bounds.maxX; x += 5) {
+      if (x < half || y < half || x >= trackingCanvas.width - half || y >= trackingCanvas.height - half) continue;
+      const contrast = localContrast(source, trackingCanvas.width, trackingCanvas.height, x, y);
+      const anchorDistance = Math.hypot(x - anchorPixel.x, y - anchorPixel.y);
+      const anchorBonus = Math.max(0, 18 - anchorDistance) * 1.2;
+      const surfaceScore = contrast + anchorBonus;
+      if (surfaceScore > 18) {
+        candidates.push({ x, y, score: surfaceScore });
+      }
     }
   }
 
+  candidates.sort((a, b) => b.score - a.score);
+  const selected = candidates.slice(0, 22);
+
+  if (!selected.some((point) => Math.hypot(point.x - anchorPixel.x, point.y - anchorPixel.y) < 10)) {
+    selected.push({ x: anchorPixel.x, y: anchorPixel.y, score: 99 });
+  }
+
   trackingPatch = {
-    values,
+    points: selected.map((point) => ({
+      x: point.x,
+      y: point.y,
+      offsetX: point.x - anchorPixel.x,
+      offsetY: point.y - anchorPixel.y,
+      values: readPatch(source, trackingCanvas.width, point.x, point.y, half)
+    })),
+    anchorX: anchorPixel.x,
+    anchorY: anchorPixel.y,
     size: patchSize,
     half,
-    x: center.x,
-    y: center.y,
     scale: 1
   };
 }
@@ -283,59 +361,75 @@ function trackLockedPoint() {
   if (!trackingPatch || dragging || scanning || !locked || !drawTrackingFrame()) return;
 
   const source = trackingContext.getImageData(0, 0, trackingCanvas.width, trackingCanvas.height).data;
-  const searchRadius = selectedProduct.mount === "ceiling" ? 18 : 20;
-  const { half, size, values } = trackingPatch;
-  const scaleGuesses = [0.72, 0.82, 0.92, 1, 1.1, 1.22, 1.36];
-  let best = { score: Number.POSITIVE_INFINITY, x: trackingPatch.x, y: trackingPatch.y, scale: trackingPatch.scale || 1 };
+  const searchRadius = selectedProduct.mount === "ceiling" ? 12 : 16;
+  const { half, size } = trackingPatch;
+  const matches = [];
 
-  for (let y = trackingPatch.y - searchRadius; y <= trackingPatch.y + searchRadius; y += 2) {
-    for (let x = trackingPatch.x - searchRadius; x <= trackingPatch.x + searchRadius; x += 2) {
-      for (const scale of scaleGuesses) {
-        if (
-          x - half * scale < 1 ||
-          y - half * scale < 1 ||
-          x + half * scale >= trackingCanvas.width - 1 ||
-          y + half * scale >= trackingCanvas.height - 1
-        ) {
-          continue;
-        }
+  for (const point of trackingPatch.points) {
+    let best = { score: Number.POSITIVE_INFINITY, x: point.x, y: point.y };
+    const patch = { half, size, values: point.values };
 
-        let score = 0;
-        let i = 0;
-
-        for (let py = -half; py <= half; py += 2) {
-          for (let px = -half; px <= half; px += 2) {
-            const scaledX = Math.round(x + px * scale);
-            const scaledY = Math.round(y + py * scale);
-            const current = luminanceAt(source, trackingCanvas.width, scaledX, scaledY);
-            const previous = values[(py + half) * size + (px + half)];
-            score += Math.abs(current - previous);
-            i += 1;
-          }
-        }
-
-        score = score / i + Math.abs(scale - (trackingPatch.scale || 1)) * 5;
-        if (score < best.score) {
-          best = { score, x, y, scale };
-        }
+    for (let y = Math.round(point.y - searchRadius); y <= point.y + searchRadius; y += 2) {
+      if (y < half || y >= trackingCanvas.height - half) continue;
+      for (let x = Math.round(point.x - searchRadius); x <= point.x + searchRadius; x += 2) {
+        if (x < half || x >= trackingCanvas.width - half) continue;
+        const score = patchDifference(source, trackingCanvas.width, x, y, patch);
+        if (score < best.score) best = { score, x, y };
       }
+    }
+
+    const confidence = Math.max(0, Math.min(1, 1 - best.score / 38));
+    if (confidence > 0.22) {
+      matches.push({
+        point,
+        x: best.x,
+        y: best.y,
+        dx: best.x - point.x,
+        dy: best.y - point.y,
+        confidence
+      });
     }
   }
 
-  trackerConfidence = Math.max(0, Math.min(1, 1 - best.score / 42));
-  if (trackerConfidence < 0.16) {
+  trackerConfidence = matches.length / Math.max(1, trackingPatch.points.length);
+  if (matches.length < 4 || trackerConfidence < 0.22) {
     target = clampToSurfaceLock(target);
     targetScale = Math.max(0.68, Math.min(1.55, targetScale));
     return;
   }
 
-  trackingPatch.x = best.x;
-  trackingPatch.y = best.y;
-  trackingPatch.scale = best.scale;
-  targetScale = Math.max(0.68, Math.min(1.55, targetScale * 0.72 + best.scale * 0.28));
+  const dx = median(matches.map((match) => match.dx));
+  const dy = median(matches.map((match) => match.dy));
+  const nextAnchorX = trackingPatch.anchorX + dx;
+  const nextAnchorY = trackingPatch.anchorY + dy;
+  const scaleSteps = matches
+    .map((match) => {
+      const before = Math.hypot(match.point.x - trackingPatch.anchorX, match.point.y - trackingPatch.anchorY);
+      const after = Math.hypot(match.x - nextAnchorX, match.y - nextAnchorY);
+      return before > 7 ? after / before : 1;
+    })
+    .filter((ratio) => ratio > 0.82 && ratio < 1.2);
+  const scaleStep = Math.max(0.86, Math.min(1.16, median(scaleSteps) || 1));
+
+  trackingPatch.anchorX = nextAnchorX;
+  trackingPatch.anchorY = nextAnchorY;
+  trackingPatch.scale *= scaleStep;
+  trackingPatch.points = matches.map((match) => ({
+    x: match.x,
+    y: match.y,
+    offsetX: match.x - nextAnchorX,
+    offsetY: match.y - nextAnchorY,
+    values: readPatch(source, trackingCanvas.width, match.x, match.y, half)
+  }));
+
+  if (trackingPatch.points.length < 10) {
+    captureTrackingPatch();
+  }
+
+  targetScale = Math.max(0.62, Math.min(1.7, targetScale * 0.76 + trackingPatch.scale * 0.24));
   const trackedPoint = clampToSurfaceLock(clampToMount({
-    x: (best.x / trackingCanvas.width) * 100,
-    y: (best.y / trackingCanvas.height) * 100
+    x: (nextAnchorX / trackingCanvas.width) * 100,
+    y: (nextAnchorY / trackingCanvas.height) * 100
   }));
   anchor = trackedPoint;
   target = trackedPoint;
