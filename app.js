@@ -6,6 +6,8 @@ const products = [
     type: "Ceiling light",
     price: "Rs 8,500",
     image: "assets/ring.png",
+    glb: "assets/ring.glb",
+    usdz: "assets/ring.usdz",
     mount: "ceiling",
     width: 250,
     description: "A warm circular chandelier for living rooms, lounges, and premium dining spaces."
@@ -17,6 +19,8 @@ const products = [
     type: "Pendant light",
     price: "Rs 3,200",
     image: "assets/pendant.png",
+    glb: "assets/pendant.glb",
+    usdz: "assets/pendant.usdz",
     mount: "ceiling",
     width: 178,
     description: "A focused pendant with a soft golden throw for kitchen counters and dining tables."
@@ -28,6 +32,8 @@ const products = [
     type: "Wall light",
     price: "Rs 2,150",
     image: "assets/sconce.png",
+    glb: "assets/sconce.glb",
+    usdz: "assets/sconce.usdz",
     mount: "wall",
     width: 138,
     description: "A slim wall fixture for bedrooms, hallways, mirrors, and warm accent corners."
@@ -39,6 +45,8 @@ const products = [
     type: "Decor ceiling light",
     price: "Rs 6,900",
     image: "assets/ring.png",
+    glb: "assets/ring.glb",
+    usdz: "assets/ring.usdz",
     mount: "ceiling",
     width: 270,
     description: "A premium gold ring design that adds a decorative glow to family spaces."
@@ -50,6 +58,8 @@ const products = [
     type: "LED strip",
     price: "Rs 950 / meter",
     image: "assets/strip.png",
+    glb: "assets/strip.glb",
+    usdz: "assets/strip.usdz",
     mount: "strip",
     width: 300,
     description: "Flexible strip lighting for ceilings, shelves, TV panels, and display counters."
@@ -61,6 +71,8 @@ const products = [
     type: "Pendant spotlight",
     price: "Rs 1,850",
     image: "assets/pendant.png",
+    glb: "assets/pendant.glb",
+    usdz: "assets/pendant.usdz",
     mount: "ceiling",
     width: 158,
     description: "A clean directional pendant for showrooms, product walls, and modern home interiors."
@@ -78,6 +90,7 @@ const lightGlow = document.querySelector("#lightGlow");
 const contactShadow = document.querySelector("#contactShadow");
 const mountLine = document.querySelector("#mountLine");
 const arCanvas = document.querySelector("#arCanvas");
+const nativeArButton = document.querySelector("#nativeArButton");
 const cameraButton = document.querySelector("#cameraButton");
 const resetButton = document.querySelector("#resetButton");
 const closeCameraButton = document.querySelector("#closeCameraButton");
@@ -129,6 +142,45 @@ const fallbackAnchors = {
 
 function productPhoto(product, className = "product-photo") {
   return `<img class="${className}" src="${product.image}" alt="${product.name}" loading="lazy" />`;
+}
+
+function absoluteAssetUrl(path) {
+  return new URL(path, window.location.href).href;
+}
+
+function isIosDevice() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isAndroidDevice() {
+  return /Android/i.test(navigator.userAgent);
+}
+
+function openNativeAR() {
+  const glbUrl = absoluteAssetUrl(selectedProduct.glb);
+  const usdzUrl = absoluteAssetUrl(selectedProduct.usdz);
+
+  if (isIosDevice()) {
+    const link = document.createElement("a");
+    link.setAttribute("rel", "ar");
+    link.setAttribute("href", usdzUrl);
+    link.style.display = "none";
+    const image = document.createElement("img");
+    image.setAttribute("alt", selectedProduct.name);
+    link.appendChild(image);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    return;
+  }
+
+  if (isAndroidDevice()) {
+    const sceneViewer = `intent://arvr.google.com/scene-viewer/1.0?file=${encodeURIComponent(glbUrl)}&mode=ar_preferred&title=${encodeURIComponent(selectedProduct.name)}#Intent;scheme=https;package=com.google.android.googlequicksearchbox;action=android.intent.action.VIEW;S.browser_fallback_url=${encodeURIComponent(glbUrl)};end;`;
+    window.location.href = sceneViewer;
+    return;
+  }
+
+  cameraStatus.textContent = "Open this page on iPhone or Android to launch the phone's real AR viewer.";
 }
 
 function renderCatalog(filter = "all") {
@@ -778,6 +830,7 @@ filters.forEach((button) => {
 });
 
 cameraButton.addEventListener("click", startCamera);
+nativeArButton.addEventListener("click", openNativeAR);
 resetButton.addEventListener("click", () => {
   if (xrSession) {
     xrPlaced = false;
