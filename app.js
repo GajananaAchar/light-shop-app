@@ -115,6 +115,9 @@ let renderState = { x: 50, y: 18, vx: 0, vy: 0 };
 let renderScale = 1;
 let targetScale = 1;
 let scaleVelocity = 0;
+let renderAngle = 0;
+let targetAngle = 0;
+let angleVelocity = 0;
 let target = { x: 50, y: 18 };
 let lastTime = performance.now();
 let lastVideoScan = 0;
@@ -196,12 +199,18 @@ function clampToMount(point, mount = selectedProduct.mount) {
   return { x: Math.max(5, Math.min(95, point.x)), y: Math.max(5, Math.min(24, point.y)) };
 }
 
+function clampValue(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
 function lockToPoint(point, immediate = false) {
   anchor = clampToMount(point);
   target = { ...anchor };
   targetScale = 1;
   renderScale = immediate ? 1 : renderScale;
   scaleVelocity = 0;
+  targetAngle = 0;
+  angleVelocity = 0;
   surfaceLock = {
     type: selectedProduct.mount,
     side: anchor.x < 38 ? "left" : anchor.x > 62 ? "right" : "center"
@@ -218,6 +227,7 @@ function lockToPoint(point, immediate = false) {
   if (immediate) {
     renderState = { x: anchor.x, y: anchor.y, vx: 0, vy: 0 };
     renderScale = 1;
+    renderAngle = 0;
   }
 
   captureTrackingPatch();
@@ -296,6 +306,60 @@ function patchDifference(data, width, x, y, patch) {
   }
 
   return score / Math.max(1, count);
+}
+
+function estimateSimilarityTransform(matches) {
+  if (matches.length < 4) {
+    return null;
+  }
+
+  const oldCenter = {
+    x: matches.reduce((sum, match) => sum + match.point.x, 0) / matches.length,
+    y: matches.reduce((sum, match) => sum + match.point.y, 0) / matches.length
+  };
+  const newCenter = {
+    x: matches.reduce((sum, match) => sum + match.x, 0) / matches.length,
+    y: matches.reduce((sum, match) => sum + match.y, 0) / matches.length
+  };
+  let dot = 0;
+  let cross = 0;
+  let oldEnergy = 0;
+  let newEnergy = 0;
+
+  for (const match of matches) {
+    const oldX = match.point.x - oldCenter.x;
+    const oldY = match.point.y - oldCenter.y;
+    const newX = match.x - newCenter.x;
+    const newY = match.y - newCenter.y;
+    dot += oldX * newX + oldY * newY;
+    cross += oldX * newY - oldY * newX;
+    oldEnergy += oldX * oldX + oldY * oldY;
+    newEnergy += newX * newX + newY * newY;
+  }
+
+  if (oldEnergy < 20 || newEnergy < 20) {
+    return null;
+  }
+
+  const rotation = Math.atan2(cross, dot);
+  const scale = clampValue(Math.sqrt(newEnergy / oldEnergy), 0.86, 1.16);
+  const cos = Math.cos(rotation) * scale;
+  const sin = Math.sin(rotation) * scale;
+
+  return {
+    oldCenter,
+    newCenter,
+    scale,
+    rotation,
+    apply(point) {
+      const x = point.x - oldCenter.x;
+      const y = point.y - oldCenter.y;
+      return {
+        x: newCenter.x + x * cos - y * sin,
+        y: newCenter.y + x * sin + y * cos
+      };
+    }
+  };
 }
 
 function percentToTrackPixel(point) {
@@ -398,18 +462,14 @@ function trackLockedPoint() {
     return;
   }
 
+  const transform = estimateSimilarityTransform(matches);
   const dx = median(matches.map((match) => match.dx));
   const dy = median(matches.map((match) => match.dy));
-  const nextAnchorX = trackingPatch.anchorX + dx;
-  const nextAnchorY = trackingPatch.anchorY + dy;
-  const scaleSteps = matches
-    .map((match) => {
-      const before = Math.hypot(match.point.x - trackingPatch.anchorX, match.point.y - trackingPatch.anchorY);
-      const after = Math.hypot(match.x - nextAnchorX, match.y - nextAnchorY);
-      return before > 7 ? after / before : 1;
-    })
-    .filter((ratio) => ratio > 0.82 && ratio < 1.2);
-  const scaleStep = Math.max(0.86, Math.min(1.16, median(scaleSteps) || 1));
+  const transformedAnchor = transform ? transform.apply({ x: trackingPatch.anchorX, y: trackingPatch.anchorY }) : null;
+  const nextAnchorX = transformedAnchor ? transformedAnchor.x : trackingPatch.anchorX + dx;
+  const nextAnchorY = transformedAnchor ? transformedAnchor.y : trackingPatch.anchorY + dy;
+  const scaleStep = transform ? transform.scale : 1;
+  const rotationStep = transform ? transform.rotation : 0;
 
   trackingPatch.anchorX = nextAnchorX;
   trackingPatch.anchorY = nextAnchorY;
@@ -422,11 +482,15 @@ function trackLockedPoint() {
     values: readPatch(source, trackingCanvas.width, match.x, match.y, half)
   }));
 
-  if (trackingPatch.points.length < 10) {
+  const measuredScale = trackingPatch.scale;
+  if (trackingPatch.points.length < 12) {
     captureTrackingPatch();
   }
 
-  targetScale = Math.max(0.62, Math.min(1.7, targetScale * 0.76 + trackingPatch.scale * 0.24));
+  targetScale = clampValue(targetScale * 0.76 + measuredScale * 0.24, 0.62, 1.7);
+  targetAngle = selectedProduct.mount === "wall"
+    ? clampValue(targetAngle * 0.82 + rotationStep * 0.18, -0.18, 0.18)
+    : 0;
   const trackedPoint = clampToSurfaceLock(clampToMount({
     x: (nextAnchorX / trackingCanvas.width) * 100,
     y: (nextAnchorY / trackingCanvas.height) * 100
@@ -546,6 +610,7 @@ function startAutoScan() {
   scanning = true;
   locked = false;
   targetScale = 1;
+  targetAngle = 0;
   cameraStatus.textContent = "Scanning. Keep the phone steady for a moment.";
 
   window.setTimeout(() => {
@@ -570,6 +635,8 @@ function stopCamera() {
   trackerConfidence = 0;
   targetScale = 1;
   renderScale = 1;
+  targetAngle = 0;
+  renderAngle = 0;
   camera.srcObject = null;
   camera.style.display = "none";
   fallbackRoom.style.display = "block";
@@ -810,7 +877,7 @@ function updateVisuals(x = renderState.x, y = renderState.y) {
   placedLight.style.left = `${x}%`;
   placedLight.style.top = `${y}%`;
   placedLight.style.width = `${width}px`;
-  placedLight.style.transform = `translate(-50%, -50%) scale(${dragging ? 1.03 : 1})`;
+  placedLight.style.transform = `translate(-50%, -50%) rotate(${renderAngle}rad) scale(${dragging ? 1.03 : 1})`;
 
   lightGlow.style.left = `${x}%`;
   lightGlow.style.top = `${y + (mount === "ceiling" ? 5 : 0)}%`;
@@ -854,6 +921,9 @@ function animate(now = performance.now()) {
     scaleVelocity += (targetScale - renderScale) * 0.1 * delta;
     scaleVelocity *= 0.76;
     renderScale += scaleVelocity * delta;
+    angleVelocity += (targetAngle - renderAngle) * 0.08 * delta;
+    angleVelocity *= 0.72;
+    renderAngle += angleVelocity * delta;
   }
 
   updateVisuals();

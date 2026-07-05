@@ -368,6 +368,19 @@ input[type="range"] {
   box-shadow: var(--shadow);
 }
 
+.phone-frame::after {
+  content: "";
+  pointer-events: none;
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  background:
+    radial-gradient(circle at center, transparent 48%, rgba(0, 0, 0, 0.12) 100%),
+    linear-gradient(180deg, rgba(0, 0, 0, 0.18), transparent 24%, transparent 76%, rgba(0, 0, 0, 0.16));
+  opacity: 0;
+  transition: opacity 180ms ease;
+}
+
 .camera-icon {
   position: absolute;
   z-index: 30;
@@ -377,7 +390,7 @@ input[type="range"] {
   height: 44px;
   border: 0;
   border-radius: 50%;
-  background: rgba(13, 18, 20, 0.72);
+  background: rgba(13, 18, 20, 0.78);
   color: #fff;
   font-size: 1.2rem;
   font-weight: 900;
@@ -411,6 +424,10 @@ body.ar-mode .phone-frame {
   border-radius: 0;
   background: #050607;
   box-shadow: none;
+}
+
+body.ar-mode .phone-frame::after {
+  opacity: 1;
 }
 
 body.ar-mode .camera-icon {
@@ -504,7 +521,7 @@ body.xr-live .placement-area {
   transform: translate(-50%, -50%) rotate(0deg);
   cursor: grab;
   filter: drop-shadow(0 28px 28px rgba(23, 22, 19, 0.28));
-  z-index: 6;
+  z-index: 12;
   transition: filter 160ms ease, opacity 160ms ease;
   will-change: left, top, transform;
 }
@@ -536,7 +553,7 @@ body.xr-live .placement-area {
 }
 
 .light-glow {
-  z-index: 3;
+  z-index: 10;
   border-radius: 50%;
   background: radial-gradient(ellipse at center, rgba(255, 235, 172, 0.88), rgba(255, 205, 104, 0.34) 44%, transparent 74%);
   mix-blend-mode: screen;
@@ -545,7 +562,7 @@ body.xr-live .placement-area {
 }
 
 .contact-shadow {
-  z-index: 5;
+  z-index: 11;
   border-radius: 50%;
   background: radial-gradient(ellipse at center, rgba(17, 18, 19, 0.36), transparent 72%);
   transform: translate(-50%, -50%);
