@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Install Shubham Lights AR</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      body {
+        min-height: 100vh;
+        margin: 0;
+        background: #f5f1e8;
+        color: #071515;
+        font-family: Arial, sans-serif;
+      }
+
+      .install-shell {
+        width: min(680px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 28px 0 42px;
+      }
+
+      .install-hero {
+        padding: 26px 0 18px;
+        border-bottom: 1px solid rgba(7, 21, 21, 0.16);
+      }
+
+      .install-brand {
+        margin: 0;
+        font-size: clamp(30px, 10vw, 54px);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      .install-subtitle {
+        margin: 14px 0 0;
+        max-width: 560px;
+        font-size: 17px;
+        line-height: 1.55;
+        color: #34414b;
+      }
+
+      .install-card {
+        margin-top: 22px;
+        padding: 20px;
+        border: 1px solid rgba(7, 21, 21, 0.16);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.7);
+      }
+
+      .install-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 56px;
+        padding: 0 18px;
+        border-radius: 8px;
+        background: #0f2a27;
+        color: #fff;
+        text-decoration: none;
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .install-button.disabled {
+        background: #9c9487;
+        pointer-events: none;
+      }
+
+      .steps {
+        margin: 18px 0 0;
+        padding-left: 22px;
+        color: #26333b;
+        line-height: 1.65;
+      }
+
+      .note {
+        margin-top: 16px;
+        color: #5b5146;
+        line-height: 1.55;
+        font-size: 14px;
+      }
+
+      .status {
+        display: inline-flex;
+        align-items: center;
+        min-height: 30px;
+        padding: 0 10px;
+        border-radius: 999px;
+        background: #eadfce;
+        color: #4a3d2d;
+        font-weight: 700;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="install-shell">
+      <section class="install-hero">
+        <span class="status">Android private install</span>
+        <h1 class="install-brand">Shubham Lights AR</h1>
+        <p class="install-subtitle">
+          Install the private Android app to preview wall and ceiling lights in a real room.
+        </p>
+      </section>
+
+      <section class="install-card">
+        <a id="downloadButton" class="install-button disabled" href="downloads/shubham-lights-ar.apk" download>
+          APK will appear here after first build
+        </a>
+
+        <ol class="steps">
+          <li>Open this page on an Android phone.</li>
+          <li>Download the APK after the first build is ready.</li>
+          <li>Allow install from browser if Android asks.</li>
+          <li>Open the app and allow camera permission.</li>
+        </ol>
+
+        <p class="note">
+          This private QR install method is for Android. iPhone needs TestFlight or App Store because Apple does not allow normal APK-style installation.
+        </p>
+      </section>
+    </main>
+    <script>
+      const button = document.getElementById("downloadButton");
+
+      fetch("downloads/shubham-lights-ar.apk", { method: "HEAD", cache: "no-store" })
+        .then((response) => {
+          if (!response.ok) return;
+          button.classList.remove("disabled");
+          button.textContent = "Download Android APK";
+        })
+        .catch(() => {});
+    </script>
+  </body>
+</html>

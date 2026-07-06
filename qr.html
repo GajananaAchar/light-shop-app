@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Shubham Lights AR QR</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f5f1e8;
+        color: #071515;
+        font-family: Arial, sans-serif;
+      }
+
+      .sheet {
+        width: min(520px, calc(100% - 32px));
+        padding: 28px;
+        border: 1px solid rgba(7, 21, 21, 0.16);
+        border-radius: 8px;
+        background: #fff;
+        text-align: center;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: 36px;
+        letter-spacing: 0;
+      }
+
+      p {
+        margin: 10px auto 20px;
+        max-width: 360px;
+        color: #34414b;
+        line-height: 1.45;
+      }
+
+      img {
+        width: min(320px, 82vw);
+        height: auto;
+        border: 10px solid #fff;
+        box-shadow: 0 12px 30px rgba(7, 21, 21, 0.14);
+      }
+
+      a {
+        display: block;
+        margin-top: 18px;
+        color: #0f6f64;
+        font-weight: 700;
+        word-break: break-all;
+      }
+
+      @media print {
+        body {
+          background: #fff;
+        }
+
+        .sheet {
+          border: 0;
+          box-shadow: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="sheet">
+      <h1>Shubham Lights AR</h1>
+      <p>Scan to install the private Android app.</p>
+      <img
+        alt="QR code for Shubham Lights AR install page"
+        src="https://api.qrserver.com/v1/create-qr-code/?size=420x420&margin=16&data=https%3A%2F%2Fgajananaachar.github.io%2Flight-shop-app%2Finstall.html"
+      />
+      <a href="https://gajananaachar.github.io/light-shop-app/install.html">
+        gajananaachar.github.io/light-shop-app/install.html
+      </a>
+    </main>
+  </body>
+</html>
